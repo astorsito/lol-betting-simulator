@@ -1,0 +1,198 @@
+@page "/simulador"
+@rendermode InteractiveServer
+@using LoLWorldsPredictor.Models
+@using LoLWorldsPredictor.Services
+@inject EstadisticasService ServicioEstadisticas
+
+<PageTitle>Simulador de Apuestas - LoL Worlds</PageTitle>
+
+<h1 class="text-center mb-4">Simulador de Draft & Mercados</h1>
+<p class="text-center text-muted">Proyecciones probabilísticas tipo casa de apuestas basadas en Big Data.</p>
+<hr />
+
+<div class="row">
+    <!-- COLUMNA EQUIPO A -->
+    <div class="col-md-6">
+        <div class="card bg-dark border-primary mb-3 shadow">
+            <div class="card-header bg-primary text-white fw-bold text-center">EQUIPO A (LADO AZUL)</div>
+            <div class="card-body">
+                @for (int i = 0; i < 5; i++)
+                {
+                    var index = i; 
+                    <div class="row mb-2">
+                        <div class="col-6">
+                            <input @bind="equipoA[index].Jugador" class="form-control form-control-sm border-primary text-dark" placeholder="Jugador (Ej. Faker)" />
+                        </div>
+                        <div class="col-6">
+                            <input @bind="equipoA[index].Campeon" class="form-control form-control-sm border-primary text-dark" placeholder="Campeón (Ej. Ahri)" />
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- COLUMNA EQUIPO B -->
+    <div class="col-md-6">
+        <div class="card bg-dark border-danger mb-3 shadow">
+            <div class="card-header bg-danger text-white fw-bold text-center">EQUIPO B (LADO ROJO)</div>
+            <div class="card-body">
+                @for (int i = 0; i < 5; i++)
+                {
+                    var index = i;
+                    <div class="row mb-2">
+                        <div class="col-6">
+                            <input @bind="equipoB[index].Jugador" class="form-control form-control-sm border-danger text-dark" placeholder="Jugador (Ej. Chovy)" />
+                        </div>
+                        <div class="col-6">
+                            <input @bind="equipoB[index].Campeon" class="form-control form-control-sm border-danger text-dark" placeholder="Campeón (Ej. Yone)" />
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="text-center my-4">
+    <button class="btn btn-lg btn-warning fw-bold px-5 shadow-lg" @onclick="SimularApuestas">💸 CALCULAR PROBABILIDADES Y MERCADOS</button>
+</div>
+
+<!-- PANEL TIPO BETANO -->
+@if (simulacionCompletada)
+{
+    <h3 class="mt-5 mb-3 fw-bold text-warning border-bottom border-warning pb-2">📋 LÍNEAS DE APUESTA (Ordenadas por Confianza)</h3>
+    
+    <div class="row">
+        @foreach (var mercado in mercadosOrdenados)
+        {
+            <div class="col-md-12 mb-2">
+                <div class="card @mercado.EstiloFondo text-white shadow">
+                    <div class="card-body d-flex justify-content-between align-items-center py-2">
+                        <div>
+                            <h5 class="mb-0 fw-bold">@mercado.Descripcion</h5>
+                            <small>@mercado.DetalleMatematico</small>
+                        </div>
+                        <div class="text-end">
+                            <h3 class="mb-0 fw-bold">@mercado.Probabilidad%</h3>
+                            <span class="badge bg-dark border">@mercado.NivelRiesgo</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    public class Seleccion { public string Jugador { get; set; } = ""; public string Campeon { get; set; } = ""; }
+    
+    // Objeto para guardar las matemáticas de las apuestas
+    public class MercadoApuesta
+    {
+        public string Descripcion { get; set; } = "";
+        public string DetalleMatematico { get; set; } = "";
+        public double Probabilidad { get; set; }
+        public string NivelRiesgo { get; set; } = "";
+        public string EstiloFondo { get; set; } = "";
+    }
+
+    private List<Seleccion> equipoA = new List<Seleccion> { new(), new(), new(), new(), new() };
+    private List<Seleccion> equipoB = new List<Seleccion> { new(), new(), new(), new(), new() };
+    
+    private bool simulacionCompletada = false;
+    private List<MercadoApuesta> mercadosOrdenados = new();
+
+    private async Task SimularApuestas()
+    {
+        mercadosOrdenados.Clear();
+
+        // 1. Extraemos TODAS las métricas de ambos equipos
+        var statsA = await CalcularStatsEquipo(equipoA);
+        var statsB = await CalcularStatsEquipo(equipoB);
+
+        double totalKillsEsperadas = statsA.Kills + statsB.Kills;
+        double winrateA = (statsA.PuntosPoder / (statsA.PuntosPoder + statsB.PuntosPoder + 0.0001)) * 100;
+        double winrateB = 100 - winrateA;
+
+        // --- CREACIÓN DE MERCADOS (LÍNEAS BETANO) ---
+        
+        // Mercado 1: Victoria Directa (Moneyline)
+        if (winrateA >= winrateB) {
+            AgregarMercado("Victoria Directa: EQUIPO A", winrateA, $"Basado en fuerza de draft ({Math.Round(winrateA,1)}% vs {Math.Round(winrateB,1)}%)");
+        } else {
+            AgregarMercado("Victoria Directa: EQUIPO B", winrateB, $"Basado en fuerza de draft ({Math.Round(winrateB,1)}% vs {Math.Round(winrateA,1)}%)");
+        }
+
+        // Mercado 2: Total de Kills (Over 25.5)
+        double probOverKills = totalKillsEsperadas > 25.5 ? Math.Min(95, 50 + (totalKillsEsperadas - 25.5) * 3) : Math.Max(5, 50 - (25.5 - totalKillsEsperadas) * 3);
+        AgregarMercado("Total de Kills: MÁS DE 25.5 (Over)", probOverKills, $"Proyección: {Math.Round(totalKillsEsperadas, 1)} kills esperadas en la partida.");
+
+        // Mercado 3: Primer Dragón
+        double probDragonA = (statsA.Dragon / (statsA.Dragon + statsB.Dragon + 0.0001)) * 100;
+        if (probDragonA > 50) {
+            AgregarMercado("Primer Dragón: EQUIPO A", probDragonA, "Basado en el historial de control de objetivos tempranos.");
+        } else {
+            AgregarMercado("Primer Dragón: EQUIPO B", 100 - probDragonA, "Basado en el historial de control de objetivos tempranos.");
+        }
+
+        // Mercado 4: Primer Barón
+        double probBaronA = (statsA.Baron / (statsA.Baron + statsB.Baron + 0.0001)) * 100;
+        if (probBaronA > 50) {
+            AgregarMercado("Primer Barón Nashor: EQUIPO A", probBaronA, "Basado en transiciones de ventaja en mid-game.");
+        } else {
+            AgregarMercado("Primer Barón Nashor: EQUIPO B", 100 - probBaronA, "Basado en transiciones de ventaja en mid-game.");
+        }
+
+        mercadosOrdenados = mercadosOrdenados.OrderByDescending(m => m.Probabilidad).ToList();
+        simulacionCompletada = true;
+    }
+
+    private void AgregarMercado(string desc, double prob, string detalle)
+    {
+        prob = Math.Round(prob, 1);
+        string riesgo = prob >= 70 ? "🟢 SAFE PICK" : prob >= 55 ? "🟡 RIESGO MEDIO" : "🔴 ALTO RIESGO";
+        string estilo = prob >= 70 ? "bg-success" : prob >= 55 ? "bg-secondary" : "bg-danger";
+        
+        mercadosOrdenados.Add(new MercadoApuesta { 
+            Descripcion = desc, Probabilidad = prob, DetalleMatematico = detalle, 
+            NivelRiesgo = riesgo, EstiloFondo = estilo 
+        });
+    }
+
+    private class StatsCompiladas { public double PuntosPoder; public double Kills; public double Dragon; public double Baron; }
+
+    private async Task<StatsCompiladas> CalcularStatsEquipo(List<Seleccion> equipo)
+    {
+        var stats = new StatsCompiladas();
+        foreach (var sel in equipo)
+        {
+            int factores = 0; double poderTemp = 0;
+
+            if (!string.IsNullOrWhiteSpace(sel.Campeon))
+            {
+                var hist = await ServicioEstadisticas.BuscarPorCampeon(sel.Campeon);
+                if (hist.Count > 0) {
+                    poderTemp += (double)hist.Count(p => p.Victoria) / hist.Count;
+                    stats.Kills += hist.Average(p => p.Kills);
+                    stats.Dragon += hist.Average(p => p.PrimerDragon);
+                    stats.Baron += hist.Average(p => p.PrimerBaron);
+                    factores++;
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(sel.Jugador))
+            {
+                var hist = await ServicioEstadisticas.BuscarPorJugador(sel.Jugador);
+                if (hist.Count > 0) {
+                    poderTemp += (double)hist.Count(p => p.Victoria) / hist.Count;
+                    stats.Kills += hist.Average(p => p.Kills);
+                    stats.Dragon += hist.Average(p => p.PrimerDragon);
+                    stats.Baron += hist.Average(p => p.PrimerBaron);
+                    factores++;
+                }
+            }
+            if (factores > 0) { stats.PuntosPoder += poderTemp / factores; }
+        }
+        return stats;
+    }
+}

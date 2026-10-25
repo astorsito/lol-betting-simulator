@@ -1,0 +1,90 @@
+﻿@page "/"
+@using LoLWorldsPredictor.Models
+@using LoLWorldsPredictor.Services
+@inject EstadisticasService ServicioEstadisticas
+
+<PageTitle>Dashboard - LoL Worlds</PageTitle>
+
+<h1 class="text-center fw-bold">Centro de Inteligencia - Worlds</h1>
+<p class="text-center text-muted">Procesando miles de registros del circuito profesional.</p>
+<hr />
+
+@if (historial == null || rankingCampeones == null)
+{
+    <div class="text-center mt-5">
+        <div class="spinner-border text-primary" role="status"></div>
+        <p>Consultando la bóveda de SQL Server...</p>
+    </div>
+}
+else
+{
+    <!-- WIDGETS GLOBALES -->
+    <div class="row mb-4 text-center">
+        <div class="col-md-4">
+            <div class="card text-white bg-dark border-primary shadow">
+                <div class="card-body">
+                    <h5 class="card-title text-primary">Partidas en Bóveda</h5>
+                    <h2>@historial.Count.ToString("N0")</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card text-white bg-dark border-success shadow">
+                <div class="card-body">
+                    <h5 class="card-title text-success">KDA Global Promedio</h5>
+                    <h2>
+                        @(Math.Round(historial.Average(p => p.Kills), 1)) / 
+                        @(Math.Round(historial.Average(p => p.Deaths), 1)) / 
+                        @(Math.Round(historial.Average(p => p.Assists), 1))
+                    </h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card text-white bg-dark border-info shadow">
+                <div class="card-body">
+                    <h5 class="card-title text-info">Oro Global Promedio</h5>
+                    <h2>@Math.Round(historial.Average(p => p.OroGanado), 0).ToString("N0") G</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TIER LIST AUTOMÁTICA -->
+    <h3 class="fw-bold text-warning mt-5">🏆 TIER LIST: TOP 5 CAMPEONES DEL META</h3>
+    <table class="table table-dark table-hover border-warning shadow-lg mt-3">
+        <thead>
+            <tr class="text-warning">
+                <th>#</th>
+                <th>Campeón</th>
+                <th>Winrate (Probabilidad)</th>
+                <th>Partidas Jugadas</th>
+                <th>Promedio de Kills</th>
+            </tr>
+        </thead>
+        <tbody>
+            @for (int i = 0; i < rankingCampeones.Count; i++)
+            {
+                var camp = rankingCampeones[i];
+                <tr>
+                    <td class="fw-bold fs-5">@(i + 1)</td>
+                    <td class="fw-bold fs-5">@camp.Campeon</td>
+                    <td class="text-success fw-bold fs-5">@camp.Winrate %</td>
+                    <td>@camp.TotalPartidas</td>
+                    <td>@camp.PromedioKills</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<Partida>? historial;
+    private List<TopCampeon>? rankingCampeones;
+
+    protected override async Task OnInitializedAsync()
+    {
+        historial = await ServicioEstadisticas.ObtenerHistorial();
+        rankingCampeones = await ServicioEstadisticas.ObtenerTopCampeones();
+    }
+}

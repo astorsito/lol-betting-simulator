@@ -1,0 +1,67 @@
+@page "/predicciones"
+@rendermode InteractiveServer
+@using LoLWorldsPredictor.Models
+@using LoLWorldsPredictor.Services
+@inject EstadisticasService ServicioEstadisticas
+
+<PageTitle>Calculadora - LoL Worlds</PageTitle>
+
+<h1>Calculadora de Probabilidades</h1>
+<p>Ingresa un campeón para proyectar su rendimiento esperado basado en datos profesionales.</p>
+<hr />
+
+<div class="row mb-4">
+    <div class="col-md-6">
+        <!-- Barra de búsqueda conectada a nuestra variable en C# -->
+        <input @bind="campeonBuscado" class="form-control text-dark" placeholder="Ejemplo: Ahri, K'Sante, Vi..." />
+    </div>
+    <div class="col-md-4">
+        <button class="btn btn-warning fw-bold" @onclick="Calcular">🔮 Analizar Riesgo</button>
+    </div>
+</div>
+
+@if (resultados != null)
+{
+    if (resultados.Count == 0)
+    {
+        <div class="alert alert-danger">No hay suficientes datos de este campeón en la bóveda.</div>
+    }
+    else
+    {
+        // Matemáticas de predicción en tiempo real
+        var winrate = Math.Round((double)resultados.Count(p => p.Victoria) / resultados.Count * 100, 1);
+        var promedioKills = Math.Round(resultados.Average(p => p.Kills), 1);
+        var promedioOro = Math.Round(resultados.Average(p => p.OroGanado), 0);
+
+        <div class="card text-white bg-dark border-warning mb-3 shadow-lg">
+            <div class="card-header border-warning text-warning">REPORTE DE INTELIGENCIA: @campeonBuscado.ToUpper()</div>
+            <div class="card-body">
+                <!-- El color cambia a verde o rojo dependiendo de si supera el 50% -->
+                <h2 style="color: @(winrate >= 50 ? "lightgreen" : "tomato");">Probabilidad de Victoria: @winrate%</h2>
+                <p class="text-muted">Basado en @resultados.Count partidas analizadas.</p>
+                <ul class="fs-5">
+                    <li><strong>Kills Promedio Esperadas:</strong> @promedioKills</li>
+                    <li><strong>Oro Promedio al finalizar:</strong> @promedioOro de oro</li>
+                </ul>
+                <hr />
+                <h4>Recomendación del Algoritmo:</h4>
+                <h3 class="fw-bold text-info">
+                    @(winrate >= 55 ? "🔥 ALTA PROBABILIDAD (SAFE PICK)" : winrate >= 45 ? "⚖️ RIESGO MEDIO (SKILL MATCHUP)" : "⚠️ ALTO RIESGO (EVITAR APOSTAR)")
+                </h3>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    private string campeonBuscado = "";
+    private List<Partida>? resultados;
+
+    private async Task Calcular()
+    {
+        if (!string.IsNullOrWhiteSpace(campeonBuscado))
+        {
+            resultados = await ServicioEstadisticas.BuscarPorCampeon(campeonBuscado);
+        }
+    }
+}
